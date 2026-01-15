@@ -72,6 +72,37 @@ function App() {
     else fetchData();
   };
 
+  const deleteRide = async (id) => {
+    if (!window.confirm('Weet je zeker dat je deze rit wilt verwijderen?')) return;
+
+    setRides(rides.filter(r => r.id !== id));
+
+    const { error } = await supabase
+      .from('rides')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting ride:', error);
+      fetchData(); // Revert on error
+    }
+  };
+
+  const updateRide = async (updatedRide) => {
+    setRides(rides.map(r => r.id === updatedRide.id ? updatedRide : r));
+
+    const { error } = await supabase
+      .from('rides')
+      .update(updatedRide)
+      .eq('id', updatedRide.id);
+
+    if (error) {
+      console.error('Error updating ride:', error);
+      fetchData(); // Revert on error
+    }
+  };
+
+
   const [lastSettlement, setLastSettlement] = useState(null);
 
   const settle = async () => {
@@ -106,7 +137,13 @@ function App() {
             lastEndKm={rides.length > 0 ? Math.max(...rides.map(r => r.endkm || 0)) : 0}
           />
         )}
-        {view === 'list' && <RideList rides={rides} />}
+        {view === 'list' && (
+          <RideList
+            rides={rides}
+            onDelete={deleteRide}
+            onUpdate={updateRide}
+          />
+        )}
         {view === 'expense' && (
           <>
             <ExpenseForm onAddExpense={addExpense} users={users} />
