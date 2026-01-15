@@ -1,47 +1,53 @@
-export default function Dashboard({ rides, users, expenses }) {
+export default function Dashboard({ rides, users, expenses, lastSettlement, onSettle }) {
   // Constants from request
   const kmPerLiter = 19;
 
-  // Calculate average fuel price from expenses
-  let totalPaid = 0;
-  let totalLiters = 0;
+  // 1. Calculate GLOBAL average fuel price (historical data provides better accuracy)
+  let globalTotalPaid = 0;
+  let globalTotalLiters = 0;
 
   expenses.forEach(exp => {
-    totalPaid += exp.amount;
-    // Handle older records that might not have liters
-    if (exp.liters) {
-      totalLiters += exp.liters;
-    }
+    globalTotalPaid += exp.amount;
+    if (exp.liters) globalTotalLiters += exp.liters;
   });
 
-  // Default to a sane price if no data yet (e.g. €1.90)
-  // If we have data, price per liter = total paid / total liters
-  const averagePricePerLiter = totalLiters > 0 ? (totalPaid / totalLiters) : 1.90;
-
-  // Cost per km = Price per liter / km per liter
+  const averagePricePerLiter = globalTotalLiters > 0 ? (globalTotalPaid / globalTotalLiters) : 1.90;
   const costPerKm = averagePricePerLiter / kmPerLiter;
 
+  // 2. Filter data for CURRENT PERIOD (since last settlement)
+  const periodRides = lastSettlement
+    ? rides.filter(r => new Date(r.timestamp || r.date) > new Date(lastSettlement))
+    : rides;
+
+  const periodExpenses = lastSettlement
+    ? expenses.filter(e => new Date(e.timestamp || e.date) > new Date(lastSettlement))
+    : expenses;
+
+  // 3. Calculate stats for Current Period
   const stats = users.reduce((acc, user) => {
     acc[user] = { km: 0, paid: 0 };
     return acc;
   }, {});
 
-  let totalKm = 0;
-
-  rides.forEach(ride => {
+  let periodTotalKm = 0;
+  periodRides.forEach(ride => {
     if (stats[ride.driver]) {
       stats[ride.driver].km += ride.distance;
     }
-    totalKm += ride.distance;
+    periodTotalKm += ride.distance;
   });
 
-  expenses.forEach(exp => {
+  let periodTotalPaid = 0;
+  let periodTotalLiters = 0;
+  periodExpenses.forEach(exp => {
     if (stats[exp.payer]) {
       stats[exp.payer].paid += exp.amount;
     }
+    periodTotalPaid += exp.amount;
+    if (exp.liters) periodTotalLiters += exp.liters;
   });
 
-  const totalCalculatedCost = totalKm * costPerKm;
+  const totalCalculatedCost = periodTotalKm * costPerKm;
 
   return (
     <div className="card dashboard">
@@ -64,11 +70,11 @@ export default function Dashboard({ rides, users, expenses }) {
 
       <div className="stats-grid">
         <div className="stat-box main">
-          <label>Totaal</label>
-          <div className="value">{totalKm.toFixed(1)} km</div>
+          <label>Totaal {lastSettlement ? '(Deze periode)' : ''}</label>
+          <div className="value">{periodTotalKm.toFixed(1)} km</div>
           <div className="sub-value">Kosten: € {totalCalculatedCost.toFixed(2)}</div>
-          <div className="sub-value" style={{ color: totalPaid < totalCalculatedCost ? 'var(--danger-color)' : 'var(--success-color)' }}>
-            Getankt: € {totalPaid.toFixed(2)} ({totalLiters.toFixed(1)} L)
+          <div className="sub-value" style={{ color: periodTotalPaid < totalCalculatedCost ? 'var(--danger-color)' : 'var(--success-color)' }}>
+            Getankt: € {periodTotalPaid.toFixed(2)} ({periodTotalLiters.toFixed(1)} L)
           </div>
         </div>
 
@@ -104,6 +110,22 @@ export default function Dashboard({ rides, users, expenses }) {
           )
         })}
       </div>
+
+      <div className="mt-8 text-center">
+        {lastSettlement && (
+          <div className="mb-2 text-xs text-muted">
+            Periode vanaf: {new Date(lastSettlement).toLocaleDateString()} {new Date(lastSettlement).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        )}
+        <button
+          onClick={onSettle}
+          className="btn-text"
+          style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textDecoration: 'underline' }}
+        >
+          🔄 Verrekenen / Balans Resetten
+        </button>
+      </div>
+
       <style>{`
         .info-bar {
             display: flex;
@@ -170,6 +192,13 @@ export default function Dashboard({ rides, users, expenses }) {
         .balance-value { font-weight: 700; }
         .balance-value.pos { color: var(--success-color); }
         .balance-value.neg { color: var(--danger-color); }
+        .btn-text {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+        }
+        .btn-text:hover { color: var(--primary-color) !important; }
       `}</style>
     </div>
   );

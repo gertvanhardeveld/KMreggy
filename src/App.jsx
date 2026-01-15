@@ -34,6 +34,17 @@ function App() {
       .order('date', { ascending: false });
 
     if (expensesData) setExpenses(expensesData);
+
+    // Fetch last settlement
+    const { data: settlementData } = await supabase
+      .from('settlements')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (settlementData && settlementData.length > 0) {
+      setLastSettlement(settlementData[0].created_at);
+    }
   };
 
   const addRide = async (ride) => {
@@ -61,6 +72,26 @@ function App() {
     else fetchData();
   };
 
+  const [lastSettlement, setLastSettlement] = useState(null);
+
+  const settle = async () => {
+    if (!window.confirm("Weet je zeker dat je wilt verrekenen? De balans wordt hiermee op 0 gezet.")) return;
+
+    const now = new Date().toISOString();
+    setLastSettlement(now);
+
+    const { error } = await supabase
+      .from('settlements')
+      .insert([{ created_at: now }]);
+
+    if (error) {
+      console.error('Error settling:', error);
+      // Revert on error if needed or just re-fetch
+      fetchData();
+    }
+  };
+
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -85,7 +116,15 @@ function App() {
           </>
         )}
 
-        {view === 'dash' && <Dashboard rides={rides} users={users} expenses={expenses} />}
+        {view === 'dash' && (
+          <Dashboard
+            rides={rides}
+            users={users}
+            expenses={expenses}
+            lastSettlement={lastSettlement}
+            onSettle={settle}
+          />
+        )}
       </main>
 
       <nav className="bottom-nav">
