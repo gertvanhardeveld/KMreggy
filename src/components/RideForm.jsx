@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Tesseract from 'tesseract.js';
 
 export default function RideForm({ onAddRide, users, lastEndKm }) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -48,6 +49,70 @@ export default function RideForm({ onAddRide, users, lastEndKm }) {
     // but usually we unmount.
   };
 
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setIsScanning(true);
+
+    Tesseract.recognize(
+      file,
+      'eng', // English is usually better for digits as well
+      {
+        logger: m => console.log(m)
+      }
+    ).then(({ data: { text } }) => {
+      console.log('OCR Output:', text);
+
+      // Attempt to find a number in the text
+      // We look for a sequence of digits, optionally with a dot or comma
+      const matches = text.match(/(\d+[.,]?\d*)/g);
+
+      if (matches) {
+        // Find the most likely candidate (e.g. largest number closer to startKm or just a valid number)
+        // For simplicity, let's take the longest number string found, or the one that is logically > startKm
+
+        let bestMatch = null;
+        let maxVal = -1;
+
+        const currentStart = parseFloat(startKm) || 0;
+
+        for (const match of matches) {
+          const val = parseFloat(match.replace(',', '.'));
+          // It should be greater than startKm and reasonable (e.g. not 1000000 more)
+          if (!isNaN(val) && val > currentStart) {
+            // Heuristic: odometer usually increases.
+            // If we find multiple, maybe pick the one closest to startKm but larger?
+            // Or just pick the valid number encountered.
+            // Let's pick the first valid one > startKm, or if none, just the largest number found.
+            if (bestMatch === null || (val > currentStart && (bestMatch <= currentStart || val < bestMatch))) {
+              bestMatch = val;
+            }
+          }
+          // Fallback if no number > start is found: just pick largest number?
+          if (maxVal < val) maxVal = val;
+        }
+
+        if (bestMatch !== null) {
+          setEndKm(bestMatch.toString());
+        } else if (maxVal > -1) {
+          setEndKm(maxVal.toString());
+        } else {
+          alert("Geen duidelijke kilometerstand gevonden. Vul het handmatig in.");
+        }
+      } else {
+        alert("Geen cijfers herkend in de foto.");
+      }
+      setIsScanning(false);
+    }).catch(err => {
+      console.error(err);
+      alert("Fout bij het scannen van de foto.");
+      setIsScanning(false);
+    });
+  };
+
   const calculatedDistance = (startKm && endKm) ? (endKm - startKm).toFixed(1) : '0.0';
 
   return (
@@ -87,14 +152,29 @@ export default function RideForm({ onAddRide, users, lastEndKm }) {
         </div>
         <div style={{ flex: 1 }}>
           <label>Eindstand (km)</label>
-          <input
-            type="number"
-            step="0.1"
-            placeholder="0.0"
-            value={endKm}
-            onChange={(e) => setEndKm(e.target.value)}
-            required
-          />
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <input
+              type="number"
+              step="0.1"
+              placeholder="0.0"
+              value={endKm}
+              onChange={(e) => setEndKm(e.target.value)}
+              required
+              style={{ flex: 1 }}
+            />
+            <label className="btn btn-secondary" style={{ padding: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📷
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+                disabled={isScanning}
+              />
+            </label>
+          </div>
+          {isScanning && <small className="text-muted">Analyseren...</small>}
         </div>
       </div>
 
