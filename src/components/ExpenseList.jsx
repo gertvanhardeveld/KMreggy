@@ -24,6 +24,11 @@ export default function ExpenseList({ expenses }) {
                                         {item.liters.toFixed(2)} L @ € {(item.amount / item.liters).toFixed(3)}/L
                                     </div>
                                 )}
+                                {item.odometer && (
+                                    <div className="text-secondary text-sm" style={{ fontSize: '0.75rem', marginTop: '2px', color: '#9ca3af' }}>
+                                        KM: {item.odometer.toFixed(1)}
+                                    </div>
+                                )}
                             </div>
                             <div className="text-right">
                                 <div className="amount">€ {item.amount.toFixed(2)}</div>
